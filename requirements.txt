@@ -1,0 +1,6 @@
+redis
+numpy
+openai
+python-dotenv
+
+# pip install -r requirements.txt

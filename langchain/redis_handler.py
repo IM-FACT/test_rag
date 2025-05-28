@@ -1,7 +1,144 @@
 from langchain_community.vectorstores import Redis
-
 import redis
+from vector_search import VectorSearchIndex
+import numpy as np
+from typing import List, Dict, Any
+import time
+import uuid
 
+
+class RedisVectorSearchHandler:
+    """Redis 8 Vector Search를 활용한 핸들러"""
+    
+    def __init__(self, 
+                 embedding_model,
+                 redis_url: str = "redis://localhost:6379",
+                 index_name: str = "climate_vectors"):
+        """
+        Redis Vector Search 핸들러 초기화
+        
+        Args:
+            embedding_model: LangChain 임베딩 모델
+            redis_url: Redis 서버 URL
+            index_name: 벡터 검색 인덱스 이름
+        """
+        try:
+            self.embedding_model = embedding_model
+            self.redis_url = redis_url
+            self.index_name = index_name
+            
+            # Redis 클라이언트 생성
+            self.redis_client = redis.Redis.from_url(redis_url, decode_responses=False)
+            
+            # Vector Search 인덱스 초기화
+            self.vector_index = VectorSearchIndex(
+                redis_client=self.redis_client,
+                index_name=index_name,
+                vector_dimension=1536,  # OpenAI text-embedding-3-small
+                distance_metric="COSINE"
+            )
+            
+            print(f"Redis Vector Search 핸들러 초기화 완료: {redis_url}")
+            
+        except Exception as e:
+            print(f"Redis Vector Search 핸들러 초기화 오류: {e}")
+            raise
+    
+    def save_embedding(self, key: str, text: str, metadata: dict) -> bool:
+        """
+        텍스트와 메타데이터를 임베딩하여 Vector Search 인덱스에 저장
+        
+        Args:
+            key: 문서 고유 키
+            text: 임베딩할 텍스트
+            metadata: 저장할 메타데이터
+            
+        Returns:
+            bool: 저장 성공 여부
+        """
+        try:
+            # 텍스트를 임베딩 벡터로 변환
+            embedding = self.embedding_model.embed_query(text)
+            
+            # 메타데이터 준비
+            doc_metadata = metadata.copy()
+            doc_metadata["text"] = text
+            doc_metadata["timestamp"] = doc_metadata.get("timestamp", time.time())
+            
+            # Vector Search 인덱스에 추가
+            success = self.vector_index.add_document(
+                doc_id=key,
+                embedding=embedding,
+                metadata=doc_metadata
+            )
+            
+            if success:
+                print(f"문서 저장 완료 - ID: {key}")
+            
+            return success
+            
+        except Exception as e:
+            print(f"임베딩 저장 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def search_similar_embeddings(self, 
+                                 query_text: str,
+                                 top_k: int = 5,
+                                 similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+        """
+        텍스트 쿼리로 유사한 문서 검색
+        
+        Args:
+            query_text: 검색할 텍스트
+            top_k: 반환할 최대 결과 수
+            similarity_threshold: 유사도 임계값
+            
+        Returns:
+            List[Dict]: 검색 결과 리스트
+        """
+        try:
+            # 쿼리 텍스트를 임베딩으로 변환
+            query_embedding = self.embedding_model.embed_query(query_text)
+            
+            # Vector Search로 유사 문서 검색
+            results = self.vector_index.search_similar(
+                query_vector=query_embedding,
+                top_k=top_k,
+                score_threshold=similarity_threshold
+            )
+            
+            print(f"검색 완료: {len(results)}개 결과 (임계값: {similarity_threshold})")
+            
+            return results
+            
+        except Exception as e:
+            print(f"유사 임베딩 검색 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def delete_embedding(self, key: str) -> bool:
+        """
+        저장된 임베딩 삭제
+        
+        Args:
+            key: 삭제할 문서의 키
+            
+        Returns:
+            bool: 삭제 성공 여부
+        """
+        return self.vector_index.delete_document(key)
+    
+    def get_index_info(self) -> Dict[str, Any]:
+        """
+        인덱스 정보 조회
+        
+        Returns:
+            Dict: 인덱스 정보
+        """
+        return self.vector_index.get_index_info()
 
 
 class RedisHandlerFixed:

@@ -77,6 +77,6 @@ python -m test.test_vector_search
 - **임베딩 생성 실패**: OpenAI API 키가 유효하고 크레딧이 충분한지 확인하세요.
 - **import 오류**: test_rag/ 루트에서 실행하거나 PYTHONPATH를 루트로 지정하세요.
 
----
+## 라이선스
 
-최소한의 실무 안내만 남긴 최신 README입니다. 자세한 API/클래스 설명은 각 모듈의 docstring 및 주석을 참고하세요.
+이 프로젝트는 IM.FACT 시스템의 일부이며, 별도의 라이선스 정책이 적용될 수 있습니다. 자세한 사항은 운영팀에 문의하세요.

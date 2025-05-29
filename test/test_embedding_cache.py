@@ -1,6 +1,6 @@
 import numpy as np
 import time
-from embedding_generator import EmbeddingGenerator
+from langchain.embedding_generator import EmbeddingGenerator
 
 def test_embedding_cache():
     eg = EmbeddingGenerator()

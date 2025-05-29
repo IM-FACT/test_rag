@@ -1,6 +1,6 @@
 import time
-from embedding_generator import EmbeddingGenerator
-from redis_handler import SemanticCacheHandler
+from langchain.embedding_generator import EmbeddingGenerator
+from langchain.redis_handler import SemanticCacheHandler
 
 def test_semantic_cache():
     embedding_gen = EmbeddingGenerator()

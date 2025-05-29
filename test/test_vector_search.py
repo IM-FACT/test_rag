@@ -5,8 +5,8 @@ Redis 8 Vector Search 기능 테스트 스크립트
 
 import sys
 import os
-from embedding_generator import EmbeddingGenerator
-from redis_handler import RedisVectorSearchHandler
+from langchain.embedding_generator import EmbeddingGenerator
+from langchain.redis_handler import RedisVectorSearchHandler
 import uuid
 import time
 

@@ -4,17 +4,20 @@ import sys
 from typing import List, Optional
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
+from redis_handler import EmbeddingsCacheHandler
+import numpy as np
 
 
 class EmbeddingGenerator:
     """LangChain을 사용하여 텍스트 임베딩을 생성하는 클래스"""
 
-    def __init__(self, model_name: str = "text-embedding-3-small"):
+    def __init__(self, model_name: str = "text-embedding-3-small", redis_url: str = "redis://localhost:6379"):
         """
         임베딩 생성기 초기화
 
         Args:
             model_name (str): 사용할 OpenAI 임베딩 모델명
+            redis_url (str): Redis 서버의 URL
         """
         # .env 파일 로드 (상위 디렉토리에 있는 .env 파일)
         env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -40,7 +43,22 @@ class EmbeddingGenerator:
             openai_api_key=self.api_key
         )
 
+        # Redis 캐시 초기화
+        self.cache = EmbeddingsCacheHandler(redis_url=redis_url)
+
         print(f"임베딩 생성기 초기화 완료: 모델 {model_name}")
+
+    def get_embedding(self, text: str):
+        # 1. 캐시 조회
+        cached = self.cache.get_embedding(text)
+        if cached is not None:
+            return cached
+        # 2. 임베딩 생성
+        embedding = self.embeddings.embed_query(text)
+        embedding_np = np.array(embedding, dtype=np.float32)
+        # 3. 캐시에 저장
+        self.cache.set_embedding(text, embedding_np)
+        return embedding_np
 
     def generate_embedding(self, text: str) -> Optional[List[float]]:
         """
@@ -58,7 +76,7 @@ class EmbeddingGenerator:
 
         try:
             # LangChain을 사용하여 임베딩 생성
-            embedding = self.embeddings.embed_query(text)
+            embedding = self.get_embedding(text)
             return embedding
         except Exception as e:
             print(f"임베딩 생성 오류: {e}")

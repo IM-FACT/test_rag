@@ -5,6 +5,7 @@ import numpy as np
 from typing import List, Dict, Any
 import time
 import uuid
+import hashlib
 
 
 class RedisVectorSearchHandler:
@@ -474,3 +475,27 @@ class SemanticCacheHandler:
             print(f"[SemanticCache] 검색 오류: {e}")
             import traceback; traceback.print_exc()
             return []
+
+
+class EmbeddingsCacheHandler:
+    """
+    Redis 기반 임베딩 캐시 핸들러 (텍스트-SHA256 해시를 key, 임베딩 bytes를 value)
+    """
+    def __init__(self, redis_url: str = "redis://localhost:6379", prefix: str = "embeddings_cache"):
+        self.redis = redis.Redis.from_url(redis_url)
+        self.prefix = prefix
+
+    def _make_key(self, text: str) -> str:
+        h = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return f"{self.prefix}:{h}"
+
+    def get_embedding(self, text: str):
+        key = self._make_key(text)
+        value = self.redis.get(key)
+        if value is not None:
+            return np.frombuffer(value, dtype=np.float32)
+        return None
+
+    def set_embedding(self, text: str, embedding: np.ndarray):
+        key = self._make_key(text)
+        self.redis.set(key, embedding.astype(np.float32).tobytes())

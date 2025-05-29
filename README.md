@@ -2,9 +2,6 @@
 
 환경 및 기후 관련 질문에 대한 답변을 효율적으로 처리하기 위한 RAG(Retrieval-Augmented Generation) 시스템입니다.
 
-> ⚠️ **본 프로젝트는 Redis 8(또는 Redis Stack)의 벡터 검색(Search) 기능이 필수입니다.**
-> 반드시 `redis/redis-stack:latest` 이미지를 사용하세요. 일반 `redis:latest`로는 벡터 검색이 동작하지 않습니다.
-
 ## 📋 목차
 
 - [프로젝트 구조](#프로젝트-구조)
@@ -46,7 +43,7 @@ test_rag/
    ```
 5. Redis Stack 실행
    ```bash
-   docker run -d -p 6379:6379 redis/redis-stack:latest
+   docker run -d -p 6379:6379 redis:latest
    # 또는 공식 문서 참고: https://redis.io/docs/stack/get-started/install/
    ```
 

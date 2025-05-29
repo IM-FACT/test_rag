@@ -1,6 +1,6 @@
 from langchain_community.vectorstores import Redis
 import redis
-from vector_search import VectorSearchIndex
+from langchain.vector_search import VectorSearchIndex
 import numpy as np
 from typing import List, Dict, Any
 import time

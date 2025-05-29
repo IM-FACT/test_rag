@@ -4,7 +4,7 @@ import sys
 from typing import List, Optional
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
-from redis_handler import EmbeddingsCacheHandler
+from langchain.redis_handler import EmbeddingsCacheHandler
 import numpy as np
 
 

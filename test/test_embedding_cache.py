@@ -8,13 +8,13 @@ def test_embedding_cache():
 
     # 1. 캐시 miss (최초)
     t0 = time.time()
-    emb1 = eg.get_embedding(text)
+    emb1 = eg.embed(text)
     t1 = time.time()
     print(f"[캐시 miss] 임베딩 shape: {emb1.shape}, 소요: {t1-t0:.3f}s")
 
     # 2. 캐시 hit (두번째)
     t2 = time.time()
-    emb2 = eg.get_embedding(text)
+    emb2 = eg.embed(text)
     t3 = time.time()
     print(f"[캐시 hit] 임베딩 shape: {emb2.shape}, 소요: {t3-t2:.3f}s")
 

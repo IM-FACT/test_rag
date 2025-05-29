@@ -5,8 +5,8 @@ from typing import Dict, Any, List
 import time
 
 # 로컬 모듈 임포트
-from embedding_generator import EmbeddingGenerator
-from redis_handler import RedisHandlerFixed, SemanticCacheHandler
+from langchain.embedding_generator import EmbeddingGenerator
+from langchain.redis_handler import RedisHandlerFixed, SemanticCacheHandler
 
 # 개발자 수정 가능 변수 (예시)
 user_query = "종이 빨대에 플라스틱 코팅을 사용하는 이유와 그로 인한 단점은 뭔가요?"

@@ -16,7 +16,7 @@ SIMILARITY_THRESHOLD = 0.4
 
 
 class MainProcessor:
-    """LangChain 기반 RAG 시스템의 메인 처리 로직을 담당하는 클래스"""
+    """LangChain 기반 RAG 시스템의 메인 처리 로직을 담당하는 클래스 (리팩토링)"""
 
     def __init__(self, redis_url: str = 'redis://localhost:6379'):
         """
@@ -26,21 +26,16 @@ class MainProcessor:
             redis_url (str): Redis 서버 URL
         """
         try:
-            # 임베딩 생성기 초기화
+            # 임베딩 생성기 및 Redis 핸들러 초기화
             self.embedding_generator = EmbeddingGenerator()
-
-            # Redis 핸들러 초기화 (임베딩 모델 전달)
             self.redis_handler = RedisHandlerFixed(
                 embedding_model=self.embedding_generator.embeddings,
                 redis_url=redis_url
             )
-
-            # 시멘틱 캐시 핸들러 추가
             self.semantic_cache = SemanticCacheHandler(
                 embedding_model=self.embedding_generator.embeddings,
                 redis_url=redis_url
             )
-
             print("메인 프로세서 초기화 완료")
         except Exception as e:
             print(f"메인 프로세서 초기화 오류: {e}")
@@ -61,27 +56,36 @@ class MainProcessor:
             "operation": None,
             "message": "",
             "similar_items": [],
-            "cache_answer": None
+            "cache_answer": None,
+            "vector_search_results": [],
+            "final_answer": None
         }
 
-        # 1. 시멘틱 캐시 우선 검색
+        # 1. 시멘틱 캐시 검색
         cache_results = self.semantic_cache.search_similar_question(
             query=query,
             score_threshold=0.05
         )
         if cache_results:
-            # 캐시 hit: 가장 유사한 답변 반환
             best = max(cache_results, key=lambda x: x["similarity"])
             result["operation"] = "cache_hit"
             result["cache_answer"] = best["answer"]
             result["success"] = True
             result["message"] = "시멘틱 캐시에서 답변을 반환했습니다."
+            result["final_answer"] = best["answer"]
             return result
-        # 2. 캐시 miss: 기존 벡터서치 + 답변 생성(여기선 예시 답변)
-        print(f"[2/2] 시멘틱 캐시 miss: 새 답변 생성 및 저장...")
-        # 실제 환경에서는 Brave Search, GPT-4.1 등으로 답변 생성
+
+        # 2. 벡터 검색 (문서 기반 근거 탐색)
+        vector_results = self.redis_handler.search_similar_embeddings(
+            query_text=query,
+            top_k=3,
+            similarity_threshold=0.4
+        )
+        result["vector_search_results"] = vector_results
+
+        # 3. 답변 생성 (여기선 임시 답변)
         generated_answer = f"[임시 답변] '{query}'에 대한 답변입니다."
-        # 캐시에 저장
+        # 4. 캐시에 저장
         self.semantic_cache.save_qa_pair(
             question=query,
             answer=generated_answer,
@@ -91,6 +95,7 @@ class MainProcessor:
         result["cache_answer"] = generated_answer
         result["success"] = True
         result["message"] = "새 답변을 생성하여 시멘틱 캐시에 저장했습니다."
+        result["final_answer"] = generated_answer
         return result
 
     def display_results(self, result: Dict[str, Any]) -> None:
@@ -113,6 +118,10 @@ class MainProcessor:
             print("\n💾 [시멘틱 캐시 MISS] 새 답변 저장:")
             print("-" * 80)
             print(result["cache_answer"])
+            print("-" * 80)
+            print("\n[벡터 검색 결과]")
+            for idx, item in enumerate(result["vector_search_results"], 1):
+                print(f"{idx}. {item['metadata'].get('text', '')} (유사도: {item['similarity']:.2f})")
             print("-" * 80)
 
 

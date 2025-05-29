@@ -8,6 +8,13 @@ import uuid
 import hashlib
 
 
+def get_redis_client(redis_url: str) -> redis.Redis:
+    """
+    Redis 클라이언트 생성 유틸 함수 (decode_responses=False 고정)
+    """
+    return redis.Redis.from_url(redis_url, decode_responses=False)
+
+
 class RedisVectorSearchHandler:
     """Redis 8 Vector Search를 활용한 핸들러"""
     
@@ -28,8 +35,8 @@ class RedisVectorSearchHandler:
             self.redis_url = redis_url
             self.index_name = index_name
             
-            # Redis 클라이언트 생성
-            self.redis_client = redis.Redis.from_url(redis_url, decode_responses=False)
+            # Redis 클라이언트 생성 (유틸 함수 사용)
+            self.redis_client = get_redis_client(redis_url)
             
             # Vector Search 인덱스 초기화
             self.vector_index = VectorSearchIndex(
@@ -154,8 +161,8 @@ class RedisHandlerFixed:
             self.redis_url = redis_url
             self.index_name = index_name
             
-            # 먼저 직접 Redis 연결 (벡터 존재 여부 확인용)
-            self.redis_client = redis.Redis.from_url(redis_url, decode_responses=False)
+            # Redis 클라이언트 생성 (유틸 함수 사용)
+            self.redis_client = get_redis_client(redis_url)
             
             # 기존 벡터 문서가 있는지 확인
             existing_docs = self._check_existing_documents()
@@ -421,7 +428,7 @@ class SemanticCacheHandler:
         self.embedding_model = embedding_model
         self.redis_url = redis_url
         self.index_name = index_name
-        self.redis_client = redis.Redis.from_url(redis_url, decode_responses=False)
+        self.redis_client = get_redis_client(redis_url)
         self.vector_index = VectorSearchIndex(
             redis_client=self.redis_client,
             index_name=index_name,
@@ -482,8 +489,9 @@ class EmbeddingsCacheHandler:
     Redis 기반 임베딩 캐시 핸들러 (텍스트-SHA256 해시를 key, 임베딩 bytes를 value)
     """
     def __init__(self, redis_url: str = "redis://localhost:6379", prefix: str = "embeddings_cache"):
-        self.redis = redis.Redis.from_url(redis_url)
+        self.redis_url = redis_url
         self.prefix = prefix
+        self.redis_client = get_redis_client(redis_url)
 
     def _make_key(self, text: str) -> str:
         h = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -491,11 +499,11 @@ class EmbeddingsCacheHandler:
 
     def get_embedding(self, text: str):
         key = self._make_key(text)
-        value = self.redis.get(key)
+        value = self.redis_client.get(key)
         if value is not None:
             return np.frombuffer(value, dtype=np.float32)
         return None
 
     def set_embedding(self, text: str, embedding: np.ndarray):
         key = self._make_key(text)
-        self.redis.set(key, embedding.astype(np.float32).tobytes())
+        self.redis_client.set(key, embedding.astype(np.float32).tobytes())

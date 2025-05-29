@@ -6,7 +6,7 @@ HNSW (Hierarchical Navigable Small World) 알고리즘을 사용하여 빠른 �
 
 import redis
 from redis.commands.search.field import VectorField, TextField, NumericField
-from redis.commands.search.index_definition import IndexDefinition, IndexType
+from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple

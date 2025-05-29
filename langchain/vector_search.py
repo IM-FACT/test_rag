@@ -115,15 +115,10 @@ class VectorSearchIndex:
             embedding_bytes = np.array(embedding, dtype=np.float32).tobytes()
             
             # Redis에 저장할 데이터 준비
-            doc_data = {
-                "embedding_vector": embedding_bytes,
-                "question": metadata.get("question", ""),
-                "source_url": metadata.get("source_url", ""),
-                "text": metadata.get("text", ""),
-                "timestamp": metadata.get("timestamp", time.time()),
-                "custom_key": doc_id,
-                "id": doc_id
-            }
+            doc_data = metadata.copy()
+            doc_data["embedding_vector"] = embedding_bytes
+            doc_data["custom_key"] = doc_id
+            doc_data["id"] = doc_id
             
             # Redis Hash로 저장
             redis_key = f"doc:{self.index_name}:{doc_id}"
@@ -175,20 +170,36 @@ class VectorSearchIndex:
                 
                 # 임계값 체크
                 if similarity_score >= score_threshold:
-                    result = {
-                        "key": doc.custom_key,
-                        "similarity": similarity_score,
-                        "metadata": {
-                            "question": doc.question,
-                            "source_url": doc.source_url,
-                            "text": doc.text,
-                            "timestamp": float(doc.timestamp),
-                            "id": doc.id,
-                            "custom_key": doc.custom_key
-                        },
-                        "redis_key": doc.id
+                    # Redis에 저장된 원본 메타데이터를 그대로 가져오거나
+                    # 필요한 모든 필드를 명시적으로 포함시켜야 합니다.
+                    # 현재 코드는 doc.question, doc.source_url 등 일부만 가져오고 있을 수 있습니다.
+                    
+                    # 예시: 저장 시 사용한 모든 메타데이터 필드를 가져오도록 수정
+                    # Redisearch 결과 객체 (doc)에서 모든 필드를 바로 딕셔너리로 변환하거나,
+                    # add_document 시 저장한 필드 이름들을 정확히 명시해서 가져와야 합니다.
+                    
+                    # 현재 코드에서 메타데이터를 구성하는 방식 (수정 필요)
+                    metadata_from_doc = {
+                        "question": getattr(doc, 'question', None),
+                        "source_url": getattr(doc, 'source_url', None),
+                        "text": getattr(doc, 'text', None),
+                        "timestamp": float(getattr(doc, 'timestamp', 0)) if hasattr(doc, 'timestamp') else None,
+                        "id": getattr(doc, 'id', None),
+                        "custom_key": getattr(doc, 'custom_key', None),
+                        "answer": getattr(doc, 'answer', None),
+                        "type": getattr(doc, 'type', None)
                     }
-                    formatted_results.append(result)
+
+                    result_item = {
+                        "key": getattr(doc, 'id', None),
+                        "similarity": similarity_score,
+                        "metadata": metadata_from_doc,
+                        "redis_key": getattr(doc, 'id', None),
+                        "question": getattr(doc, 'question', None),
+                        "answer": getattr(doc, 'answer', None)
+                    }
+                    
+                    formatted_results.append(result_item)
                     
             return formatted_results
             

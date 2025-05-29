@@ -410,3 +410,67 @@ class RedisHandlerFixed:
         except Exception as e:
             print(f"임베딩 삭제 오류: {e}")
             return False
+
+
+class SemanticCacheHandler:
+    """
+    Redis 8 기반 시멘틱 캐시 핸들러 (질문-답변 쌍, 벡터 유사도 기반)
+    """
+    def __init__(self, embedding_model, redis_url: str = "redis://localhost:6379", index_name: str = "semantic_cache_index"):
+        self.embedding_model = embedding_model
+        self.redis_url = redis_url
+        self.index_name = index_name
+        self.redis_client = redis.Redis.from_url(redis_url, decode_responses=False)
+        self.vector_index = VectorSearchIndex(
+            redis_client=self.redis_client,
+            index_name=index_name,
+            vector_dimension=1536,  # OpenAI text-embedding-3-small
+            distance_metric="COSINE"
+        )
+
+    def save_qa_pair(self, question: str, answer: str, metadata: dict = None) -> bool:
+        """
+        질문-답변 쌍을 임베딩하여 벡터 인덱스에 저장
+        """
+        try:
+            embedding = self.embedding_model.embed_query(question)
+            doc_metadata = metadata.copy() if metadata else {}
+            doc_metadata["question"] = question
+            doc_metadata["answer"] = answer
+            doc_metadata["timestamp"] = doc_metadata.get("timestamp", time.time())
+            doc_metadata["type"] = "semantic_cache"
+            key = str(uuid.uuid4())
+            return self.vector_index.add_document(
+                doc_id=key,
+                embedding=embedding,
+                metadata=doc_metadata
+            )
+        except Exception as e:
+            print(f"[SemanticCache] 저장 오류: {e}")
+            import traceback; traceback.print_exc()
+            return False
+
+    def search_similar_question(self, query: str, top_k: int = 3, score_threshold: float = 0.05):
+        """
+        쿼리와 유사한 질문-답변 쌍을 score_threshold 기준으로 검색
+        """
+        try:
+            embedding = self.embedding_model.embed_query(query)
+            results = self.vector_index.search_similar(
+                query_vector=embedding,
+                top_k=top_k,
+                score_threshold=score_threshold
+            )
+            # answer 필드만 추출
+            return [
+                {
+                    "question": r["metadata"].get("question"),
+                    "answer": r["metadata"].get("answer"),
+                    "similarity": r["similarity"]
+                }
+                for r in results
+            ]
+        except Exception as e:
+            print(f"[SemanticCache] 검색 오류: {e}")
+            import traceback; traceback.print_exc()
+            return []

@@ -5,8 +5,8 @@ from typing import Dict, Any, List
 import time
 
 # 로컬 모듈 임포트
-from embedding_generator import EmbeddingGenerator
-from redis_handler import RedisHandlerFixed
+from langchain.embedding_generator import EmbeddingGenerator
+from langchain.redis_handler import RedisHandlerFixed, SemanticCacheHandler
 
 # 개발자 수정 가능 변수 (예시)
 user_query = "종이 빨대에 플라스틱 코팅을 사용하는 이유와 그로 인한 단점은 뭔가요?"
@@ -16,7 +16,7 @@ SIMILARITY_THRESHOLD = 0.4
 
 
 class MainProcessor:
-    """LangChain 기반 RAG 시스템의 메인 처리 로직을 담당하는 클래스"""
+    """LangChain 기반 RAG 시스템의 메인 처리 로직을 담당하는 클래스 (리팩토링)"""
 
     def __init__(self, redis_url: str = 'redis://localhost:6379'):
         """
@@ -26,15 +26,16 @@ class MainProcessor:
             redis_url (str): Redis 서버 URL
         """
         try:
-            # 임베딩 생성기 초기화
+            # 임베딩 생성기 및 Redis 핸들러 초기화
             self.embedding_generator = EmbeddingGenerator()
-
-            # Redis 핸들러 초기화 (임베딩 모델 전달)
             self.redis_handler = RedisHandlerFixed(
                 embedding_model=self.embedding_generator.embeddings,
                 redis_url=redis_url
             )
-
+            self.semantic_cache = SemanticCacheHandler(
+                embedding_model=self.embedding_generator.embeddings,
+                redis_url=redis_url
+            )
             print("메인 프로세서 초기화 완료")
         except Exception as e:
             print(f"메인 프로세서 초기화 오류: {e}")
@@ -54,51 +55,47 @@ class MainProcessor:
             "success": False,
             "operation": None,
             "message": "",
-            "similar_items": []
+            "similar_items": [],
+            "cache_answer": None,
+            "vector_search_results": [],
+            "final_answer": None
         }
 
-        # 유사한 임베딩 검색
-        print(f"[1/2] 유사 임베딩 검색 중...")
-        similar_items = self.redis_handler.search_similar_embeddings(
-            query_text=query,  # 검색할 텍스트
-            similarity_threshold=SIMILARITY_THRESHOLD
+        # 1. 시멘틱 캐시 검색
+        cache_results = self.semantic_cache.search_similar_question(
+            query=query,
+            score_threshold=0.05
         )
-
-        # 처리 결과에 따라 분기
-        if similar_items:
-            # 유사한 항목이 존재하는 경우
-            print(f"[2/2] 유사한 항목 {len(similar_items)}개 발견")
-            result["operation"] = "found_similar"
-            result["similar_items"] = similar_items
+        if cache_results:
+            best = max(cache_results, key=lambda x: x["similarity"])
+            result["operation"] = "cache_hit"
+            result["cache_answer"] = best["answer"]
             result["success"] = True
-            result["message"] = f"{len(similar_items)}개의 유사한 항목을 찾았습니다."
-        else:
-            # 유사한 항목이 없는 경우 -> 새로 저장
-            print(f"[2/2] 유사한 항목 없음: 새 임베딩 저장 중...")
+            result["message"] = "시멘틱 캐시에서 답변을 반환했습니다."
+            result["final_answer"] = best["answer"]
+            return result
 
-            # 메타데이터 생성
-            metadata = {
-                "question": query,
-                "timestamp": time.time()
-            }
+        # 2. 벡터 검색 (문서 기반 근거 탐색)
+        vector_results = self.redis_handler.search_similar_embeddings(
+            query_text=query,
+            top_k=3,
+            similarity_threshold=0.4
+        )
+        result["vector_search_results"] = vector_results
 
-            # 고유 키 생성 (UUID)
-            unique_key = str(uuid.uuid4())
-
-            # Redis에 저장
-            save_result = self.redis_handler.save_embedding(
-                key=unique_key,
-                text=query,  # 임베딩할 텍스트
-                metadata=metadata
-            )
-            # print(f"저장 전 메타데이터: {metadata}")
-            if save_result:
-                result["operation"] = "saved_new"
-                result["success"] = True
-                result["message"] = f"새 임베딩이 성공적으로 저장되었습니다. (키: {unique_key})"
-            else:
-                result["message"] = "새 임베딩 저장에 실패했습니다."
-
+        # 3. 답변 생성 (여기선 임시 답변)
+        generated_answer = f"[임시 답변] '{query}'에 대한 답변입니다."
+        # 4. 캐시에 저장
+        self.semantic_cache.save_qa_pair(
+            question=query,
+            answer=generated_answer,
+            metadata={"source": "gpt", "timestamp": time.time()}
+        )
+        result["operation"] = "cache_miss_saved"
+        result["cache_answer"] = generated_answer
+        result["success"] = True
+        result["message"] = "새 답변을 생성하여 시멘틱 캐시에 저장했습니다."
+        result["final_answer"] = generated_answer
         return result
 
     def display_results(self, result: Dict[str, Any]) -> None:
@@ -112,23 +109,19 @@ class MainProcessor:
             print(f"\n❌ 오류: {result['message']}")
             return
 
-        if result["operation"] == "found_similar":
-            print("\n🔍 유사한 정보 발견:")
+        if result["operation"] == "cache_hit":
+            print("\n🔍 [시멘틱 캐시 HIT] 답변:")
             print("-" * 80)
-
-            for idx, item in enumerate(result["similar_items"], 1):
-                metadata = item["metadata"]
-                similarity = item["similarity"]
-
-                print(f"[{idx}] 유사도: {similarity:.4f} ({similarity * 100:.1f}%)")
-                print(f"    질문: {metadata.get('question', 'N/A')}")
-                print(f"    출처: {metadata.get('source_url', 'N/A')}")
-                print(f"    내용: {item.get('text', 'N/A')[:100]}...")
-                print("-" * 80)
-        elif result["operation"] == "saved_new":
-            print("\n💾 새 정보 저장 완료:")
+            print(result["cache_answer"])
             print("-" * 80)
-            print(f"메시지: {result['message']}")
+        elif result["operation"] == "cache_miss_saved":
+            print("\n💾 [시멘틱 캐시 MISS] 새 답변 저장:")
+            print("-" * 80)
+            print(result["cache_answer"])
+            print("-" * 80)
+            print("\n[벡터 검색 결과]")
+            for idx, item in enumerate(result["vector_search_results"], 1):
+                print(f"{idx}. {item['metadata'].get('text', '')} (유사도: {item['similarity']:.2f})")
             print("-" * 80)
 
 

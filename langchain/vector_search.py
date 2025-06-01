@@ -9,9 +9,8 @@ from redis.commands.search.field import VectorField, TextField, NumericField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
-import json
-import time
+from typing import List, Dict, Any
+
 
 
 class VectorSearchIndex:

@@ -1,12 +1,11 @@
 # main_processor.py (LangChain 버전)
 import sys
-import uuid
 from typing import Dict, Any, List
 import time
 
 # 로컬 모듈 임포트
 from langchain.embedding_generator import EmbeddingGenerator
-from langchain.redis_handler import RedisHandlerFixed, SemanticCacheHandler
+from langchain.redis_handler import RedisVectorSearchHandler, SemanticCacheHandler
 
 # 개발자 수정 가능 변수 (예시)
 user_query = "종이 빨대에 플라스틱 코팅을 사용하는 이유와 그로 인한 단점은 뭔가요?"
@@ -28,9 +27,10 @@ class MainProcessor:
         try:
             # 임베딩 생성기 및 Redis 핸들러 초기화
             self.embedding_generator = EmbeddingGenerator()
-            self.redis_handler = RedisHandlerFixed(
+            self.redis_handler = RedisVectorSearchHandler(
                 embedding_model=self.embedding_generator.embeddings,
-                redis_url=redis_url
+                redis_url=redis_url,
+                index_name="document_index"
             )
             self.semantic_cache = SemanticCacheHandler(
                 embedding_model=self.embedding_generator.embeddings,
@@ -60,7 +60,8 @@ class MainProcessor:
             "vector_search_results": [],
             "final_answer": None
         }
-
+        print("hello")
+        print(self.redis_handler.get_all_stored_documents())
         # 1. 시멘틱 캐시 검색
         cache_results = self.semantic_cache.search_similar_question(
             query=query,

@@ -25,8 +25,8 @@ def test_vector_search():
         # Redis Vector Search 핸들러 초기화
         redis_handler = RedisVectorSearchHandler(
             embedding_model=embedding_gen.embeddings,
-            redis_url="redis://host.docker.internal:6379",
-            index_name="climate_vectors_test"
+            redis_url="redis://localhost:6379",
+            index_name="document_index"
         )
         print("✅ 컴포넌트 초기화 완료\n")
     except Exception as e:

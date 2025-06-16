@@ -2,6 +2,7 @@
 import sys
 from typing import Dict, Any, List
 import time
+import asyncio
 
 # import os
 
@@ -12,6 +13,7 @@ import time
 # 로컬 모듈 임포트
 from langchain.embedding_generator import EmbeddingGenerator
 from langchain.redis_handler import RedisVectorSearchHandler, SemanticCacheHandler
+from scrap_mcp.mcp_module import search_scrap
 
 # 개발자 수정 가능 변수 (예시)
 user_query = "종이 빨대에 플라스틱 코팅을 사용하는 이유와 그로 인한 단점은 뭔가요?"
@@ -68,6 +70,7 @@ class MainProcessor:
         }
         print("hello")
         print(self.redis_handler.get_all_stored_documents())
+
         # 1. 시멘틱 캐시 검색
         cache_results = self.semantic_cache.search_similar_question(
             query=query,
@@ -81,6 +84,11 @@ class MainProcessor:
             result["message"] = "시멘틱 캐시에서 답변을 반환했습니다."
             result["final_answer"] = best["answer"]
             return result
+
+        # MCP 문서 수집
+        query_ans_pool = asyncio.run(search_scrap(user_query))
+        print(f"\n[search_scrap 결과]: {len(query_ans_pool)}개 문서 수집")
+
 
         # 2. 벡터 검색 (문서 기반 근거 탐색)
         vector_results = self.redis_handler.search_similar_embeddings(

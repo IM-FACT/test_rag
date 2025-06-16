@@ -3,6 +3,12 @@ import sys
 from typing import Dict, Any, List
 import time
 
+# import os
+
+# current_dir = os.path.dirname(os.path.abspath(__file__))      # 현재 langchain 폴더
+# project_root = os.path.abspath(os.path.join(current_dir, ".."))  # TEST_RAG
+# sys.path.insert(0, project_root)
+
 # 로컬 모듈 임포트
 from langchain.embedding_generator import EmbeddingGenerator
 from langchain.redis_handler import RedisVectorSearchHandler, SemanticCacheHandler

@@ -9,4 +9,18 @@ langchain-community
 pytest
 tqdm
 
+# scrap_mcp dependencies
+aiohttp>=3.12.11
+beautifulsoup4>=4.13.4
+httpx>=0.28.1
+lxml>=5.4.0
+mcp[cli]>=1.9.2
+openai>=1.14.0
+playwright>=1.52.0
+pytest-playwright>=0.7.0
+python-dotenv>=1.1.0
+requests>=2.32.3
+tf-playwright-stealth>=1.1.2
+trafilatura>=2.0.0
+
 # pip install -r requirements.txt

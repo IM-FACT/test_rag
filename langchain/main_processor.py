@@ -4,19 +4,21 @@ from typing import Dict, Any, List
 import time
 import asyncio
 
-# import os
+import os
 
-# current_dir = os.path.dirname(os.path.abspath(__file__))      # 현재 langchain 폴더
-# project_root = os.path.abspath(os.path.join(current_dir, ".."))  # TEST_RAG
-# sys.path.insert(0, project_root)
+current_dir = os.path.dirname(os.path.abspath(__file__))      # 현재 langchain 폴더
+project_root = os.path.abspath(os.path.join(current_dir, ".."))  # TEST_RAG
+sys.path.insert(0, project_root)
 
 # 로컬 모듈 임포트
 from langchain.embedding_generator import EmbeddingGenerator
 from langchain.redis_handler import RedisVectorSearchHandler, SemanticCacheHandler
 from scrap_mcp.mcp_module import search_scrap
+from scrap_mcp.tool.gen_ans import ans_with_mcp
+
 
 # 개발자 수정 가능 변수 (예시)
-user_query = "종이 빨대에 플라스틱 코팅을 사용하는 이유와 그로 인한 단점은 뭔가요?"
+user_query = "국지성 호우도 이상기후야??"
 
 # 유사도 임계값 (이 값 이상의 유사도를 가진 결과가 있으면 유사한 것으로 간주)
 SIMILARITY_THRESHOLD = 0.4
@@ -85,11 +87,6 @@ class MainProcessor:
             result["final_answer"] = best["answer"]
             return result
 
-        # MCP 문서 수집
-        query_ans_pool = asyncio.run(search_scrap(user_query))
-        print(f"\n[search_scrap 결과]: {len(query_ans_pool)}개 문서 수집")
-
-
         # 2. 벡터 검색 (문서 기반 근거 탐색)
         vector_results = self.redis_handler.search_similar_embeddings(
             query_text=query,
@@ -98,8 +95,19 @@ class MainProcessor:
         )
         result["vector_search_results"] = vector_results
 
-        # 3. 답변 생성 (여기선 임시 답변)
-        generated_answer = f"[임시 답변] '{query}'에 대한 답변입니다."
+        if vector_results:
+            print("[벡터 DB HIT] 유사 문서로 답변 생성")
+            query_ans_pool = [item["metadata"]["text"] for item in vector_results]
+        else:
+            query_ans_pool = asyncio.run(search_scrap(query))
+            print(f"[벡터 DB MISS] MCP 문서 {len(query_ans_pool)}개 수집으로 답변 생성")
+
+        # 3. GPT 기반 답변 생성
+        generated_answer = ans_with_mcp(query=query, docs=query_ans_pool)
+
+        # # 3. 답변 생성 (여기선 임시 답변)
+        # generated_answer = f"[임시 답변] '{query}'에 대한 답변입니다."
+
         # 4. 캐시에 저장
         self.semantic_cache.save_qa_pair(
             question=query,

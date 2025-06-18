@@ -30,7 +30,7 @@ test_rag/
 │ │ ├── brave_search_impl.py
 │ │ └── brave_search_test.py
 │ ├── tool/
-│ │ ├── gen_ans.py # GPT-4.1 답변 생성
+│ │ ├── gen_ans.py # GPT-4-turbo 답변 생성
 │ │ ├── rewrite_query.py # GPT-4o 키워드 리라이팅
 │ │ ├── bing.py
 │ │ ├── goo_api.py

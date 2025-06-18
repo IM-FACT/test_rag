@@ -8,7 +8,7 @@ import time
 async def use_bing_n_page(url: str):
     result = {}
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=False)
+        browser = await playwright.chromium.launch(headless=True)
         try:
             page = await browser.new_page()
             

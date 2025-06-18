@@ -4,11 +4,11 @@ from typing import Dict, Any, List
 import time
 import asyncio
 
-import os
+# import os
 
-current_dir = os.path.dirname(os.path.abspath(__file__))      # 현재 langchain 폴더
-project_root = os.path.abspath(os.path.join(current_dir, ".."))  # TEST_RAG
-sys.path.insert(0, project_root)
+# current_dir = os.path.dirname(os.path.abspath(__file__))      # 현재 langchain 폴더
+# project_root = os.path.abspath(os.path.join(current_dir, ".."))  # TEST_RAG
+# sys.path.insert(0, project_root)
 
 # 로컬 모듈 임포트
 from langchain.embedding_generator import EmbeddingGenerator
@@ -18,7 +18,7 @@ from scrap_mcp.tool.gen_ans import ans_with_mcp
 
 
 # 개발자 수정 가능 변수 (예시)
-user_query = "국지성 호우도 이상기후야??"
+user_query = "해수면 상승으로 실제 우리나라 해안가 도시들이 위험할까? 몇 년 뒤에 어떤 변화가 생길지 궁금함"
 
 # 유사도 임계값 (이 값 이상의 유사도를 가진 결과가 있으면 유사한 것으로 간주)
 SIMILARITY_THRESHOLD = 0.4

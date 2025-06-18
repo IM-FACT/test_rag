@@ -32,10 +32,10 @@ def is_url_alive(url: str) -> bool:
         return False
 
 # 검색 + 스크래핑 연동 함수
-async def search_scrap(query: str) -> list[str]:
+async def search_scrap(query: str) -> list[dict]:
     kor_queries, eng_queries = rewrite_query(query)
     rewritten_query_list = kor_queries + eng_queries
-
+    print(f"\nrewritten_query_list: {rewritten_query_list}")
     results = []
     for r_q in rewritten_query_list:
         partial_results = brave_search_impl(query=r_q, api_key=api_key, count=2)
@@ -57,9 +57,16 @@ async def search_scrap(query: str) -> list[str]:
                 content = result.get("page", {}).get("description", "")
 
             if content and isinstance(content, str) and len(content.strip()) > 0:
-                all_scrap_list.append(content.strip())
+                all_scrap_list.append({
+                    "url": item["url"],
+                    "content": content.strip()
+                })
+
 
         except Exception as e:
             print(f"{item['url']} 스크랩 실패: {e}")
 
-    return all_scrap_list
+    docs = all_scrap_list[:3]
+    for doc in docs:
+        doc["content"] = doc["content"][:5000]
+    return docs

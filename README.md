@@ -14,17 +14,36 @@
 
 ```
 test_rag/
-├── langchain/                # 핵심 서비스 코드 (임베딩, 벡터 검색, 캐시 등)
-│   ├── embedding_generator.py
-│   ├── redis_handler.py
-│   ├── vector_search.py
-│   └── main_processor.py
-├── test/                     # 테스트 코드 (테스트 전용)
-│   ├── test_embedding_cache.py
-│   ├── test_semantic_cache.py
-│   └── test_vector_search.py
+├── langchain/ # 핵심 서비스 코드 (임베딩, 벡터 검색, 캐시 등)
+│ ├── embedding_generator.py # OpenAI 임베딩
+│ ├── redis_handler.py 
+│ ├── vector_search.py
+│ └── main_processor.py 
+│
+├── scrap_mcp/ # 문서 수집 및 GPT 기반 답변 생성 모듈
+│ ├── mcp_module.py # Brave Search + 본문 수집 + GPT 답변 통합
+│ ├── main.py # 단독 실행용 스크래퍼
+│ ├── prompts/ # GPT용 프롬프트
+│ │ ├── generate_ans_prompt.txt
+│ │ └── rewrite_query_prompt.txt
+│ ├── brave_search_module/
+│ │ ├── brave_search_impl.py
+│ │ └── brave_search_test.py
+│ ├── tool/
+│ │ ├── gen_ans.py # GPT-4-turbo 답변 생성
+│ │ ├── rewrite_query.py # GPT-4o 키워드 리라이팅
+│ │ ├── bing.py
+│ │ ├── goo_api.py
+│ │ └── text.py
+│ └── tests/
+│   └── test_mcp_module.py
+│
+├── test/ # 테스트 코드 (테스트 전용)
+│ ├── test_embedding_cache.py
+│ ├── test_semantic_cache.py
+│ └── test_vector_search.py
 ├── requirements.txt
-├── .env
+├── .env.example
 └── README.md
 ```
 
@@ -37,9 +56,11 @@ test_rag/
    cd test_rag
    pip install -r requirements.txt
    ```
-4. .env 파일 생성 및 OpenAI API 키 입력
+4. .env 파일 생성 및 API 키 입력
    ```env
    OPENAI_API_KEY=your-openai-api-key-here
+   BRAVE_AI_API_KEY=your-brave-search-api-key-here
+   GOOGLE_API_KEY=your-google-api-key-here
    ```
 5. Redis Stack 실행
    ```bash

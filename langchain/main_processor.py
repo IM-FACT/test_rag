@@ -70,8 +70,6 @@ class MainProcessor:
             "vector_search_results": [],
             "final_answer": None
         }
-        print("hello")
-        print(self.redis_handler.get_all_stored_documents())
 
         # 1. 시멘틱 캐시 검색
         cache_results = self.semantic_cache.search_similar_question(
@@ -99,12 +97,29 @@ class MainProcessor:
             print("[벡터 DB HIT] 유사 문서로 답변 생성")
             query_ans_pool = [item["metadata"]["text"] for item in vector_results]
         else:
+            print("🔍 MCP 검색 시작...")
             query_ans_pool = asyncio.run(search_scrap(query))
-            print(f"[벡터 DB MISS] MCP 문서 {len(query_ans_pool)}개 수집으로 답변 생성")
+            print(f"📄 MCP 문서 수집 완료: {len(query_ans_pool)}개")
+            
+            # 🔧 수집된 문서 내용 확인
+            print("\n=== 수집된 문서 내용 확인 ===")
+            for i, doc in enumerate(query_ans_pool, 1):
+                print(f"📄 문서 {i}:")
+                print(f"   URL: {doc.get('url', 'N/A')}")
+                print(f"   내용 길이: {len(doc.get('content', ''))}")
+                print(f"   내용 미리보기: {doc.get('content', '')[:200]}...")
+                print("-" * 50)
+            print("=" * 60)
 
         # 3. GPT 기반 답변 생성
+        print("🤖 GPT 답변 생성 시작...")
+        print(f"📝 전달할 문서 개수: {len(query_ans_pool)}")
+        
         generated_answer = ans_with_mcp(query=query, docs=query_ans_pool)
-
+        
+        print(f"✅ GPT 답변 생성 완료")
+        print(f"📝 답변 길이: {len(generated_answer)}")
+        print(f"📝 답변 내용: {generated_answer}")
         # # 3. 답변 생성 (여기선 임시 답변)
         # generated_answer = f"[임시 답변] '{query}'에 대한 답변입니다."
 

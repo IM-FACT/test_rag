@@ -1,3 +1,10 @@
+"""MCP module for query rewriting, web search, and content scraping.
+
+Orchestrates the search pipeline: rewrites the user query into multiple
+search variants, runs Brave Search for relevant URLs, validates them,
+and scrapes content with priority-based extraction.
+"""
+
 import sys
 import os
 import requests
@@ -17,8 +24,16 @@ from scrap_mcp.main import scrape_web
 load_dotenv()
 api_key = os.getenv("BRAVE_AI_API_KEY")
 
-# URL 유효성 검사
+
 def is_url_alive(url: str) -> bool:
+    """Checks whether a URL is reachable and returns valid content.
+
+    Args:
+        url: URL to validate.
+
+    Returns:
+        True if the URL responds with status 200 and no error indicators.
+    """
     try:
         if "jsessionid" in url.lower():
             return False
@@ -31,11 +46,27 @@ def is_url_alive(url: str) -> bool:
     except requests.RequestException:
         return False
 
-# 검색 + 스크래핑 연동 함수
+
 async def search_scrap(query: str) -> list[dict]:
+    """Searches the web and scrapes content for the given query.
+
+    Pipeline:
+        1. Rewrites the query into Korean and English variants.
+        2. Runs Brave Search for each variant.
+        3. Filters out unreachable URLs.
+        4. Scrapes each valid URL and extracts content.
+        5. Returns the top 3 documents (max 5000 chars each).
+
+    Args:
+        query: User's original question.
+
+    Returns:
+        List of dicts with 'url' and 'content' fields.
+    """
     kor_queries, eng_queries = rewrite_query(query)
     rewritten_query_list = kor_queries + eng_queries
-    print(f"\nrewritten_query_list: {rewritten_query_list}")
+    print(f"\nRewritten queries: {rewritten_query_list}")
+
     results = []
     for r_q in rewritten_query_list:
         partial_results = brave_search_impl(query=r_q, api_key=api_key, count=2)
@@ -49,7 +80,7 @@ async def search_scrap(query: str) -> list[dict]:
             result_json = await scrape_web(item["url"], rewritten_query_list)
             result = json.loads(result_json)
 
-            # 우선순위: normal → google → page.description
+            # Content priority: normal > google > page.description
             content = result.get("normal")
             if not content or not isinstance(content, str) or len(content.strip()) == 0:
                 content = result.get("google")
@@ -57,14 +88,11 @@ async def search_scrap(query: str) -> list[dict]:
                 content = result.get("page", {}).get("description", "")
 
             if content and isinstance(content, str) and len(content.strip()) > 0:
-                all_scrap_list.append({
-                    "url": item["url"],
-                    "content": content.strip()
-                })
-
-
+                all_scrap_list.append(
+                    {"url": item["url"], "content": content.strip()}
+                )
         except Exception as e:
-            print(f"{item['url']} 스크랩 실패: {e}")
+            print(f"Scrape failed for {item['url']}: {e}")
 
     docs = all_scrap_list[:3]
     for doc in docs:

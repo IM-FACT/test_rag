@@ -1,3 +1,11 @@
+"""Redis handlers for vector search, semantic caching, and embedding caching.
+
+Provides three handler classes:
+- RedisVectorSearchHandler: stores and searches document embeddings.
+- SemanticCacheHandler: caches question-answer pairs with vector similarity.
+- EmbeddingsCacheHandler: caches raw embedding vectors by text hash.
+"""
+
 import redis
 from langchain.vector_search import VectorSearchIndex
 import numpy as np
@@ -8,154 +16,152 @@ import hashlib
 
 
 def get_redis_client(redis_url: str) -> redis.Redis:
-    """
-    Redis 클라이언트 생성 유틸 함수 (decode_responses=False 고정)
+    """Creates a Redis client with raw byte responses.
+
+    Args:
+        redis_url: Redis server URL.
+
+    Returns:
+        A Redis client instance with decode_responses=False.
     """
     return redis.Redis.from_url(redis_url, decode_responses=False)
 
 
 class RedisVectorSearchHandler:
-    """Redis 8 Vector Search를 활용한 핸들러"""
-    
-    def __init__(self, 
-                 embedding_model,
-                 redis_url: str = "redis://localhost:6379",
-                 index_name: str = "document_index"):
-        """
-        Redis Vector Search 핸들러 초기화
-        
+    """Handles document embedding storage and similarity search via Redis.
+
+    Attributes:
+        embedding_model: LangChain embedding model for vectorization.
+        vector_index: Underlying VectorSearchIndex instance.
+    """
+
+    def __init__(
+        self,
+        embedding_model,
+        redis_url: str = "redis://localhost:6379",
+        index_name: str = "document_index",
+    ):
+        """Initializes the vector search handler.
+
         Args:
-            embedding_model: LangChain 임베딩 모델
-            redis_url: Redis 서버 URL
-            index_name: 벡터 검색 인덱스 이름
+            embedding_model: LangChain embedding model.
+            redis_url: Redis server URL.
+            index_name: Name of the vector search index.
         """
         try:
             self.embedding_model = embedding_model
             self.redis_url = redis_url
             self.index_name = index_name
-            
-            # Redis 클라이언트 생성 (유틸 함수 사용)
+
             self.redis_client = get_redis_client(redis_url)
-            
-            # Vector Search 인덱스 초기화
             self.vector_index = VectorSearchIndex(
                 redis_client=self.redis_client,
                 index_name=index_name,
-                vector_dimension=1536,  # OpenAI text-embedding-3-small
-                distance_metric="COSINE"
+                vector_dimension=1536,
+                distance_metric="COSINE",
             )
-            
-            print(f"Redis Vector Search 핸들러 초기화 완료: {redis_url}")
-            
+            print(f"RedisVectorSearchHandler initialized: {redis_url}")
         except Exception as e:
-            print(f"Redis Vector Search 핸들러 초기화 오류: {e}")
+            print(f"RedisVectorSearchHandler initialization error: {e}")
             raise
-    
+
     def save_embedding(self, key: str, text: str, metadata: dict) -> bool:
-        """
-        텍스트와 메타데이터를 임베딩하여 Vector Search 인덱스에 저장
-        
+        """Embeds text and stores it in the vector search index.
+
         Args:
-            key: 문서 고유 키
-            text: 임베딩할 텍스트
-            metadata: 저장할 메타데이터
-            
+            key: Unique document key.
+            text: Text to embed.
+            metadata: Document metadata to store alongside the vector.
+
         Returns:
-            bool: 저장 성공 여부
+            True if the document was saved successfully.
         """
         try:
-            # 텍스트를 임베딩 벡터로 변환
             embedding = self.embedding_model.embed_query(text)
-            
-            # 메타데이터 준비
+
             doc_metadata = metadata.copy()
             doc_metadata["text"] = text
             doc_metadata["timestamp"] = doc_metadata.get("timestamp", time.time())
-            
-            # Vector Search 인덱스에 추가
+
             success = self.vector_index.add_document(
-                doc_id=key,
-                embedding=embedding,
-                metadata=doc_metadata
+                doc_id=key, embedding=embedding, metadata=doc_metadata
             )
-            
             if success:
-                print(f"문서 저장 완료 - ID: {key}")
-            
+                print(f"Document saved - ID: {key}")
             return success
-            
         except Exception as e:
-            print(f"임베딩 저장 오류: {e}")
+            print(f"Embedding save error: {e}")
             import traceback
+
             traceback.print_exc()
             return False
-    
-    def search_similar_embeddings(self, 
-                                 query_text: str,
-                                 top_k: int = 5,
-                                 similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
-        """
-        텍스트 쿼리로 유사한 문서 검색
-        
+
+    def search_similar_embeddings(
+        self,
+        query_text: str,
+        top_k: int = 5,
+        similarity_threshold: float = 0.7,
+    ) -> List[Dict[str, Any]]:
+        """Searches for documents similar to the given query text.
+
         Args:
-            query_text: 검색할 텍스트
-            top_k: 반환할 최대 결과 수
-            similarity_threshold: 유사도 임계값
-            
+            query_text: Text query to search for.
+            top_k: Maximum number of results to return.
+            similarity_threshold: Minimum cosine similarity threshold.
+
         Returns:
-            List[Dict]: 검색 결과 리스트
+            List of result dicts with similarity scores and metadata.
         """
         try:
-            # 쿼리 텍스트를 임베딩으로 변환
             query_embedding = self.embedding_model.embed_query(query_text)
-            
-            # Vector Search로 유사 문서 검색
+
             results = self.vector_index.search_similar(
                 query_vector=query_embedding,
                 top_k=top_k,
-                score_threshold=similarity_threshold
+                score_threshold=similarity_threshold,
             )
-            
-            print(f"검색 완료: {len(results)}개 결과 (임계값: {similarity_threshold})")
-            
+            print(
+                f"Search complete: {len(results)} results "
+                f"(threshold: {similarity_threshold})"
+            )
             return results
-            
         except Exception as e:
-            print(f"유사 임베딩 검색 오류: {e}")
+            print(f"Similar embedding search error: {e}")
             import traceback
+
             traceback.print_exc()
             return []
-    
+
     def delete_embedding(self, key: str) -> bool:
-        """
-        저장된 임베딩 삭제
-        
+        """Deletes a stored embedding by key.
+
         Args:
-            key: 삭제할 문서의 키
-            
+            key: Document key to delete.
+
         Returns:
-            bool: 삭제 성공 여부
+            True if the document was deleted successfully.
         """
         return self.vector_index.delete_document(key)
-    
+
     def get_index_info(self) -> Dict[str, Any]:
-        """
-        인덱스 정보 조회
-        
-        Returns:
-            Dict: 인덱스 정보
-        """
+        """Returns metadata about the vector search index."""
         return self.vector_index.get_index_info()
 
     def get_all_stored_documents(self) -> list:
-        """Redis에 저장된 모든 문서를 조회"""
+        """Retrieves all documents stored in the index.
+
+        Returns:
+            List of document dicts with redis_key, key, metadata, and text.
+        """
         try:
-            all_keys = self.redis_client.keys(f"doc:{self.index_name}:*".encode('utf-8'))
+            all_keys = self.redis_client.keys(
+                f"doc:{self.index_name}:*".encode("utf-8")
+            )
 
             all_documents = []
             for key in all_keys:
                 try:
-                    key_str = key.decode('utf-8')
+                    key_str = key.decode("utf-8")
                     hash_data = self.redis_client.hgetall(key)
 
                     metadata = {}
@@ -163,55 +169,73 @@ class RedisVectorSearchHandler:
 
                     for field, value in hash_data.items():
                         try:
-                            field_str = field.decode('utf-8') if isinstance(field, bytes) else str(field)
+                            field_str = (
+                                field.decode("utf-8")
+                                if isinstance(field, bytes)
+                                else str(field)
+                            )
 
-                            # 임베딩 벡터 필드들은 제외 (바이너리 데이터)
-                            if field_str in ['embedding_vector', 'content_vector']:
+                            if field_str in ["embedding_vector", "content_vector"]:
                                 continue
 
-                            # UTF-8 디코딩 시도
                             if isinstance(value, bytes):
                                 try:
-                                    value_str = value.decode('utf-8')
+                                    value_str = value.decode("utf-8")
                                 except UnicodeDecodeError:
-                                    # 디코딩 실패시 건너뛰기
                                     continue
                             else:
                                 value_str = str(value)
 
-                            if field_str == 'text':
+                            if field_str == "text":
                                 text_content = value_str
                             else:
                                 metadata[field_str] = value_str
-
-                        except Exception as e:
-                            # 개별 필드 처리 오류는 무시하고 계속 진행
+                        except Exception:
                             continue
 
                     document_info = {
                         "redis_key": key_str,
-                        "key": metadata.get("custom_key", metadata.get("id", "unknown")),
+                        "key": metadata.get(
+                            "custom_key", metadata.get("id", "unknown")
+                        ),
                         "metadata": metadata,
-                        "text": text_content or "N/A"
+                        "text": text_content or "N/A",
                     }
-
                     all_documents.append(document_info)
-
                 except Exception as e:
-                    print(f"문서 처리 오류 ({key}): {e}")
+                    print(f"Document processing error ({key}): {e}")
                     continue
 
             return all_documents
-
         except Exception as e:
-            print(f"전체 문서 조회 오류: {e}")
+            print(f"All documents retrieval error: {e}")
             return []
 
+
 class SemanticCacheHandler:
+    """Caches question-answer pairs with vector similarity search.
+
+    Uses Redis vector search to find semantically similar previously-answered
+    questions, enabling cache hits for paraphrased queries.
+
+    Attributes:
+        embedding_model: LangChain embedding model.
+        vector_index: Underlying VectorSearchIndex instance.
     """
-    Redis 8 기반 시멘틱 캐시 핸들러 (질문-답변 쌍, 벡터 유사도 기반)
-    """
-    def __init__(self, embedding_model, redis_url: str = "redis://localhost:6379", index_name: str = "semantic_cache_index"):
+
+    def __init__(
+        self,
+        embedding_model,
+        redis_url: str = "redis://localhost:6379",
+        index_name: str = "semantic_cache_index",
+    ):
+        """Initializes the semantic cache handler.
+
+        Args:
+            embedding_model: LangChain embedding model.
+            redis_url: Redis server URL.
+            index_name: Name of the semantic cache index.
+        """
         self.embedding_model = embedding_model
         self.redis_url = redis_url
         self.index_name = index_name
@@ -219,13 +243,22 @@ class SemanticCacheHandler:
         self.vector_index = VectorSearchIndex(
             redis_client=self.redis_client,
             index_name=index_name,
-            vector_dimension=1536,  # OpenAI text-embedding-3-small
-            distance_metric="COSINE"
+            vector_dimension=1536,
+            distance_metric="COSINE",
         )
 
-    def save_qa_pair(self, question: str, answer: str, metadata: dict = None) -> bool:
-        """
-        질문-답변 쌍을 임베딩하여 벡터 인덱스에 저장
+    def save_qa_pair(
+        self, question: str, answer: str, metadata: dict = None
+    ) -> bool:
+        """Stores a question-answer pair in the semantic cache.
+
+        Args:
+            question: The question text (used for embedding).
+            answer: The answer text.
+            metadata: Optional additional metadata.
+
+        Returns:
+            True if the pair was saved successfully.
         """
         try:
             embedding = self.embedding_model.embed_query(question)
@@ -236,55 +269,85 @@ class SemanticCacheHandler:
             doc_metadata["type"] = "semantic_cache"
             key = str(uuid.uuid4())
             return self.vector_index.add_document(
-                doc_id=key,
-                embedding=embedding,
-                metadata=doc_metadata
+                doc_id=key, embedding=embedding, metadata=doc_metadata
             )
         except Exception as e:
-            print(f"[SemanticCache] 저장 오류: {e}")
-            import traceback; traceback.print_exc()
+            print(f"[SemanticCache] Save error: {e}")
+            import traceback
+
+            traceback.print_exc()
             return False
 
-    def search_similar_question(self, query: str, top_k: int = 3, score_threshold: float = 0.05):
-        """
-        쿼리와 유사한 질문-답변 쌍을 score_threshold 기준으로 검색
+    def search_similar_question(
+        self, query: str, top_k: int = 3, score_threshold: float = 0.05
+    ) -> List[Dict[str, Any]]:
+        """Finds cached answers for semantically similar questions.
+
+        Args:
+            query: The question to search for.
+            top_k: Maximum number of results.
+            score_threshold: Minimum cosine similarity threshold.
+
+        Returns:
+            List of dicts with question, answer, and similarity fields.
         """
         try:
             embedding = self.embedding_model.embed_query(query)
             results = self.vector_index.search_similar(
-                query_vector=embedding,
-                top_k=top_k,
-                score_threshold=score_threshold
+                query_vector=embedding, top_k=top_k, score_threshold=score_threshold
             )
-            # answer 필드만 추출
             return [
                 {
                     "question": r["metadata"].get("question"),
                     "answer": r["metadata"].get("answer"),
-                    "similarity": r["similarity"]
+                    "similarity": r["similarity"],
                 }
                 for r in results
             ]
         except Exception as e:
-            print(f"[SemanticCache] 검색 오류: {e}")
-            import traceback; traceback.print_exc()
+            print(f"[SemanticCache] Search error: {e}")
+            import traceback
+
+            traceback.print_exc()
             return []
 
 
 class EmbeddingsCacheHandler:
+    """Caches raw embedding vectors in Redis keyed by text SHA-256 hash.
+
+    Attributes:
+        prefix: Redis key prefix for cached embeddings.
     """
-    Redis 기반 임베딩 캐시 핸들러 (텍스트-SHA256 해시를 key, 임베딩 bytes를 value)
-    """
-    def __init__(self, redis_url: str = "redis://localhost:6379", prefix: str = "embeddings_cache"):
+
+    def __init__(
+        self,
+        redis_url: str = "redis://localhost:6379",
+        prefix: str = "embeddings_cache",
+    ):
+        """Initializes the embeddings cache handler.
+
+        Args:
+            redis_url: Redis server URL.
+            prefix: Redis key prefix.
+        """
         self.redis_url = redis_url
         self.prefix = prefix
         self.redis_client = get_redis_client(redis_url)
 
     def _make_key(self, text: str) -> str:
+        """Generates a Redis key from the SHA-256 hash of the text."""
         h = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return f"{self.prefix}:{h}"
 
-    def get_embedding(self, text: str):
+    def get_embedding(self, text: str) -> np.ndarray | None:
+        """Retrieves a cached embedding for the given text.
+
+        Args:
+            text: The original text.
+
+        Returns:
+            Cached embedding as a numpy array, or None if not found.
+        """
         key = self._make_key(text)
         value = self.redis_client.get(key)
         if value is not None:
@@ -292,5 +355,11 @@ class EmbeddingsCacheHandler:
         return None
 
     def set_embedding(self, text: str, embedding: np.ndarray):
+        """Stores an embedding in the cache.
+
+        Args:
+            text: The original text (used to generate the cache key).
+            embedding: Embedding vector to cache.
+        """
         key = self._make_key(text)
         self.redis_client.set(key, embedding.astype(np.float32).tobytes())
